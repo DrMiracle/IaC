@@ -41,13 +41,19 @@ for name in INSTANCES_NAMES:
     )
     instances.append(instance)
 
-aws.ec2.SecurityGroupRule('allow-inter-instance-5432-5435',
-    security_group_id=security_group.id,
+# Extract private IPs of the instances and convert them to CIDR notation (/32)
+private_ips = [instance.private_ip.apply(lambda ip: f"{ip}/32") for instance in instances]
+
+# Add new security group rule so that only communication between inter instances
+# is allowed on ports 5432-5435
+aws.ec2.SecurityGroupRule("inter-instance-communication",
     type="ingress",
     from_port=5432,
     to_port=5435,
     protocol="tcp",
-    source_security_group_id=security_group.id  # Allow traffic between instances within the same security group
+    security_group_id=security_group.id,
+    cidr_blocks=private_ips,  # Allow only the private IPs of the instances
+    opts=pulumi.ResourceOptions(depends_on=instances, provider=aws_provider)  # Ensure instances are created first
 )
 
 # Export public and private IPs of instances
