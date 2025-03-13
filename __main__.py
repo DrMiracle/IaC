@@ -41,17 +41,14 @@ for name in INSTANCES_NAMES:
     )
     instances.append(instance)
 
-# Restrict access to ports 5432-5435 only from these instances
-for instance in instances:
-    instance.tags["Name"].apply(lambda naming: aws.ec2.SecurityGroupRule(
-        f"db-access-{naming}",
-        type="ingress",
-        from_port=5432,
-        to_port=5435,
-        protocol="tcp",
-        security_group_id=security_group.id,
-        source_security_group_id=security_group.id  # Allow only between these instances
-    ))
+aws.ec2.SecurityGroupRule('allow-inter-instance-5432-5435',
+    security_group_id=security_group.id,
+    type="ingress",
+    from_port=5432,
+    to_port=5435,
+    protocol="tcp",
+    source_security_group_id=security_group.id  # Allow traffic between instances within the same security group
+)
 
 # Export public and private IPs of instances
 for i, instance in enumerate(instances):
