@@ -54,6 +54,6 @@ for instance in instances:
     ))
 
 # Export public and private IPs of instances
-for instance in instances:
-    pulumi.export(f"{INSTANCES_NAMES}_public_ip", instance.public_ip)
-    pulumi.export(f"{INSTANCES_NAMES}_private_ip", instance.private_ip)
+for i, instance in enumerate(instances):
+    pulumi.export(f"{INSTANCES_NAMES[i]}_public_ip", instance.public_ip)
+    pulumi.export(f"{INSTANCES_NAMES[i]}_private_ip", instance.private_ip)
