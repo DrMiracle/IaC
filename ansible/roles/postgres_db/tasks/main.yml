@@ -1,0 +1,18 @@
+---
+- name: Install PostgreSQL
+  apt:
+    name: postgresql
+    state: present
+
+- name: Ensure PostgreSQL is running and enabled on boot
+  service:
+    name: postgresql
+    state: started
+    enabled: yes
+
+- name: Create replication user
+  postgresql_user:
+    name: replicator
+    password: "{{ replication_password }}"
+    role_attr_flags: REPLICATION
+    state: present

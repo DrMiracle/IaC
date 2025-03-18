@@ -1,0 +1,26 @@
+---
+- name: Install PostgreSQL
+  apt:
+    name: postgresql
+    state: present
+
+- name: Ensure PostgreSQL is stopped
+  service:
+    name: postgresql
+    state: stopped
+
+- name: Remove existing data directory
+  file:
+    path: /var/lib/postgresql/12/main
+    state: absent
+
+- name: Create replication configuration
+  template:
+    src: recovery.conf.j2
+    dest: /var/lib/postgresql/12/main/recovery.conf
+
+- name: Start PostgreSQL
+  service:
+    name: postgresql
+    state: started
+    enabled: yes
