@@ -14,16 +14,3 @@
     primary_ip: "{{ hostvars['db1']['ansible_host'] }}"
   roles:
     - replica_db
-
-- hosts: db1
-  vars:
-    ansible_remote_temp: "/home/ubuntu/ansible_tmp"
-  tasks:
-    - name: Create replication user
-      become: yes
-      become_user: postgres
-      postgresql_user:
-        name: replicator
-        password: "{{ replication_password }}"
-        role_attr_flags: REPLICATION
-        state: present
