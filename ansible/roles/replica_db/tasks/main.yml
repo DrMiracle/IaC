@@ -11,13 +11,13 @@
 
 - name: Remove existing data directory
   file:
-    path: /var/lib/postgresql/12/main
+    path: /etc/postgresql/14/main/postgresql.conf
     state: absent
 
 - name: Create replication configuration
   template:
     src: recovery.conf.j2
-    dest: /var/lib/postgresql/12/main/recovery.conf
+    dest: /etc/postgresql/14/main/postgresql.conf
 
 - name: Start PostgreSQL
   service:

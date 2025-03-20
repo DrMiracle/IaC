@@ -1,14 +1,51 @@
 ---
 - name: Install PostgreSQL
   apt:
-    name: postgresql
+    name:
+      - postgresql
+      - "python3-psycopg2"
     state: present
+    update_cache: yes
 
-- name: Ensure PostgreSQL is running and enabled on boot
+- name: Check if PostgreSQL data directory exists
+  ansible.builtin.stat:
+    path: /var/lib/postgresql/14/main
+  register: pg_data_dir
+
+- name: Drop broken PostgreSQL cluster if data directory is missing
+  command: pg_dropcluster 14 main --stop
+  become: true
+
+- name: Recreate PostgreSQL cluster if missing
+  command: pg_createcluster 14 main --start
+  become: true
+
+- name: Ensure PostgreSQL is running and enabled
   service:
     name: postgresql
     state: started
     enabled: yes
+
+#- name: Setup pg_hba.conf for replication
+#  community.postgresql.postgresql_pg_hba:
+#    dest: "/etc/postgresql/9.5/main/pg_hba.conf"
+#    contype: host
+#    users: replica_user
+#    source: "{{ hostvars['server2']['ansible_host'] }}/32"
+#    databases: replication
+#    method: md5
+#  become: true
+#  become_user: postgres
+#  notify: restart postgresql
+
+- name: Add listen_addresses in postgresql.conf
+  become: true
+  lineinfile:
+    path: /etc/postgresql/14/main/postgresql.conf
+    regexp: '^listen_addresses\s*='
+    line: "listen_addresses = '*'"
+    state: present
+  #notify: restart postgresql
 
 - name: Create replication user
   postgresql_user:
@@ -16,3 +53,96 @@
     password: "{{ replication_password }}"
     role_attr_flags: REPLICATION
     state: present
+  become: true
+  become_user: postgres
+
+- name: Create volleyball database
+  become: true
+  become_user: postgres
+  postgresql_db:
+    name: volleyball
+    state: present
+
+- name: Grant SELECT permissions to replicator on all existing tables
+  become: true
+  become_user: postgres
+  postgresql_query:
+    db: volleyball
+    query: "GRANT SELECT ON ALL TABLES IN SCHEMA public TO replicator;"
+
+- name: Delete teams and players if exist
+  become: true
+  become_user: postgres
+  postgresql_query:
+    db: volleyball
+    query: |
+      DROP TABLE IF EXISTS teams, players;
+
+- name: Create table teams
+  become: true
+  become_user: postgres
+  postgresql_query:
+    db: volleyball
+    query: |
+      CREATE TABLE IF NOT EXISTS teams (
+        id_team SERIAL PRIMARY KEY,
+        team_name TEXT,
+        league_name varchar(15) not null check(
+            league_name = 'Ліга 3' OR league_name = 'Ліга 2' OR
+            league_name = 'Ліга 1' OR league_name = 'Вища ліга'),
+        wins FLOAT
+      );
+
+- name: Create table players
+  become: true
+  become_user: postgres
+  postgresql_query:
+    db: volleyball
+    query: |
+      CREATE TABLE IF NOT EXISTS players(
+        id_player SERIAL PRIMARY KEY,
+        id_team INT REFERENCES teams(id_team),
+        player_name TEXT,
+        position varchar(15) not null check(
+            position = 'Ліберо' OR position = 'Нападник' OR
+            position = 'Сетер' OR position = 'Центральний'),
+        height FLOAT
+      );
+
+- name: Insert data into teams
+  become: true
+  become_user: postgres
+  postgresql_query:
+    db: volleyball
+    query: |
+      INSERT INTO teams (team_name, league_name, wins) VALUES
+      ('Перуджа', 'Вища ліга', 19),
+      ('Бакром-Кажани', 'Ліга 1', 7)
+      ON CONFLICT DO NOTHING;
+
+- name: Insert data into players
+  become: true
+  become_user: postgres
+  postgresql_query:
+    db: volleyball
+    query: |
+      INSERT INTO players (id_team, player_name, position, height) VALUES
+      (1, 'Олег Плотницький', 'Нападник', 194),
+      (1, 'Сімоне Джаннеллі', 'Сетер', 200),
+      (1, 'Себастьян Соле', 'Центральний', 202),
+      (2, 'Василь Тупчій', 'Нападник', 192),
+      (2, 'Ярослав Пампушко', 'Ліберо', 178)
+      ON CONFLICT DO NOTHING;
+
+- name: Create publication
+  become: true
+  become_user: postgres
+  postgresql_query:
+    db: volleyball
+    query: |
+      CREATE PUBLICATION my_publication ;
+
+- name: Check for logical replication cluster existence
+  command: pg_lsclusters
+  register: pg_clusters
+  changed_when: false

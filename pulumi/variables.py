@@ -7,7 +7,7 @@ SSH_KEYS = [
 # EC2
 AWS_REGION = "eu-north-1"
 SIZE = "t3.micro"
-AMI = "ami-000e50175c5f86214"
+AMI = "ami-04542995864e26699"
 
 # instances
 INSTANCES_NAMES = ["server-1", "server-2"]
