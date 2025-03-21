@@ -1,1 +1,5 @@
-host    replication     replicator      {{ replica_ip }}/32        md5
+local   all             postgres                                peer
+host    all             all                 0.0.0.0/0           md5
+host    replication     {{user}}      {{ primary_ip }}/32        md5
+
+local   all             all                                     trust

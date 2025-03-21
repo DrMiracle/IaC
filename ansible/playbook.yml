@@ -2,15 +2,17 @@
 - hosts: postgres_db
   become: yes
   vars:
+    user: replicator
     replication_password: "securepassword"
-    replica_ip: "{{ hostvars['db2']['ansible_host'] }}"
+    replica_ip: "{{ hostvars['db2']['private_ip'] }}"
   roles:
     - postgres_db
 
 - hosts: replica_db
   become: yes
   vars:
+    user: replicator
     replication_password: "securepassword"
-    primary_ip: "{{ hostvars['db1']['ansible_host'] }}"
+    primary_ip: "{{ hostvars['db1']['private_ip'] }}"
   roles:
     - replica_db

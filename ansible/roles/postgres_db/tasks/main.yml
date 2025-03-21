@@ -1,4 +1,10 @@
 ---
+- name: Install ACL package (fix permission issues)
+  ansible.builtin.apt:
+    name: acl
+    state: present
+    update_cache: yes
+
 - name: Install PostgreSQL
   apt:
     name:
@@ -6,6 +12,11 @@
       - "python3-psycopg2"
     state: present
     update_cache: yes
+
+- name: Check for PostgreSQL cluster existence
+  command: pg_lsclusters
+  register: pg_clusters
+  changed_when: false
 
 - name: Check if PostgreSQL data directory exists
   ansible.builtin.stat:
@@ -26,30 +37,31 @@
     state: started
     enabled: yes
 
-#- name: Setup pg_hba.conf for replication
-#  community.postgresql.postgresql_pg_hba:
-#    dest: "/etc/postgresql/9.5/main/pg_hba.conf"
-#    contype: host
-#    users: replica_user
-#    source: "{{ hostvars['server2']['ansible_host'] }}/32"
-#    databases: replication
-#    method: md5
-#  become: true
-#  become_user: postgres
-#  notify: restart postgresql
-
 - name: Add listen_addresses in postgresql.conf
-  become: true
   lineinfile:
     path: /etc/postgresql/14/main/postgresql.conf
-    regexp: '^listen_addresses\s*='
+    regexp: '^listen_addresses'
     line: "listen_addresses = '*'"
     state: present
-  #notify: restart postgresql
+  notify: restart postgresql
+
+- name: Ensure pg_hba.conf allows replication
+  lineinfile:
+    path: /etc/postgresql/14/main/pg_hba.conf
+    line: "host    replication     {{user}}      {{replica_ip}}/32     md5"
+    state: present
+  notify: restart postgresql
+
+- name: Ensure pg_hba.conf allows replication
+  lineinfile:
+    path: /etc/postgresql/14/main/pg_hba.conf
+    line: "host    all     {{user}}       {{replica_ip}}/32     md5"
+    state: present
+  notify: restart postgresql
 
 - name: Create replication user
   postgresql_user:
-    name: replicator
+    name: "{{ user }}"
     password: "{{ replication_password }}"
     role_attr_flags: REPLICATION
     state: present
@@ -63,12 +75,12 @@
     name: volleyball
     state: present
 
-- name: Grant SELECT permissions to replicator on all existing tables
+- name: Grant SELECT permissions to user on all existing tables
   become: true
   become_user: postgres
   postgresql_query:
     db: volleyball
-    query: "GRANT SELECT ON ALL TABLES IN SCHEMA public TO replicator;"
+    query: "GRANT SELECT ON ALL TABLES IN SCHEMA public TO {{user}};"
 
 - name: Delete teams and players if exist
   become: true
@@ -142,7 +154,35 @@
     query: |
       CREATE PUBLICATION my_publication ;
 
-- name: Check for logical replication cluster existence
-  command: pg_lsclusters
-  register: pg_clusters
-  changed_when: false
+- name: Alter publication
+  become: true
+  become_user: postgres
+  postgresql_query:
+    db: volleyball
+    query: |
+      ALTER PUBLICATION my_publication ADD TABLE players;
+
+- name: Grant permissions for schema
+  become: yes
+  become_user: postgres
+  postgresql_privs:
+    database: volleyball
+    roles: "{{ user }}"
+    privs: USAGE
+    type: schema
+    objs: public
+
+- name: Grant permissions for table players
+  become: yes
+  become_user: postgres
+  postgresql_privs:
+    database: volleyball
+    roles: "{{ user }}"
+    privs: SELECT
+    type: table
+    objs: ALL_IN_SCHEMA
+
+- name: Apply config changes by restarting PostgreSQL
+  service:
+    name: postgresql
+    state: restarted
