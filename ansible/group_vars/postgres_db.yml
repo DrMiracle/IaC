@@ -1,0 +1,3 @@
+user: replicator
+replication_password: "securepassword"
+replica_ip: "{{ hostvars['db2']['private_ip'] }}"

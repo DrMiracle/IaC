@@ -1,36 +1,4 @@
 ---
-- name: Install ACL package (fix permission issues)
-  ansible.builtin.apt:
-    name: acl
-    state: present
-    update_cache: yes
-
-- name: Install PostgreSQL
-  apt:
-    name:
-      - postgresql
-      - "python3-psycopg2"
-    state: present
-    update_cache: yes
-
-- name: Check for PostgreSQL cluster existence
-  command: pg_lsclusters
-  register: pg_clusters
-  changed_when: false
-
-- name: Check if PostgreSQL data directory exists
-  ansible.builtin.stat:
-    path: /var/lib/postgresql/14/main
-  register: pg_data_dir
-
-- name: Drop broken PostgreSQL cluster if data directory is missing
-  command: pg_dropcluster 14 main --stop
-  become: true
-
-- name: Recreate PostgreSQL cluster if missing
-  command: pg_createcluster 14 main --start
-  become: true
-
 - name: Ensure PostgreSQL is running and enabled
   service:
     name: postgresql
@@ -81,6 +49,13 @@
   postgresql_query:
     db: volleyball
     query: "GRANT SELECT ON ALL TABLES IN SCHEMA public TO {{user}};"
+
+- name: Grant SELECT permissions to user on all future tables
+  become: true
+  become_user: postgres
+  postgresql_query:
+    db: volleyball
+    query: "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO {{user}};"
 
 - name: Delete teams and players if exist
   become: true
@@ -146,21 +121,37 @@
       (2, 'Ярослав Пампушко', 'Ліберо', 178)
       ON CONFLICT DO NOTHING;
 
+- name: Change wal_level to logical postgresql.conf
+  lineinfile:
+    path: /etc/postgresql/14/main/postgresql.conf
+    regexp: '^wal_level'
+    line: "wal_level = logical"
+    state: present
+  notify: restart postgresql
+
+- name: Delete publication if exist
+  become: true
+  become_user: postgres
+  postgresql_query:
+    db: volleyball
+    query: |
+      DROP PUBLICATION IF EXISTS my_publication;
+
 - name: Create publication
   become: true
   become_user: postgres
   postgresql_query:
     db: volleyball
     query: |
-      CREATE PUBLICATION my_publication ;
+      CREATE PUBLICATION my_publication FOR TABLE teams;
 
-- name: Alter publication
-  become: true
-  become_user: postgres
-  postgresql_query:
-    db: volleyball
-    query: |
-      ALTER PUBLICATION my_publication ADD TABLE players;
+#- name: Alter publication
+#  become: true
+#  become_user: postgres
+#  postgresql_query:
+#    db: volleyball
+#    query: |
+#      ALTER PUBLICATION my_publication ADD TABLE players;
 
 - name: Grant permissions for schema
   become: yes

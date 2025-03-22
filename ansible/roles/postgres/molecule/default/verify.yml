@@ -1,0 +1,43 @@
+---
+- name: Verify PostgreSQL Streaming Replication
+  hosts:
+    - postgres_db
+    - replica_db  # Target the replica server
+  become: true
+  tasks:
+
+    - name: Check if database exists on the replica
+      become_user: postgres
+      postgresql_query:
+        db: volleyball
+        query: "SELECT datname FROM pg_database WHERE datname = 'volleyball';"
+      register: db_result
+      failed_when: db_result.rowcount == 0
+      changed_when: false
+
+    - name: Check if tables exist on the replica
+      become_user: postgres
+      postgresql_query:
+        db: volleyball
+        query: "SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename IN ('teams', 'players');"
+      register: table_result
+      failed_when: table_result.rowcount < 2
+      changed_when: false
+
+    - name: Check if replication is active
+      become_user: postgres
+      postgresql_query:
+        db: postgres
+        query: "SELECT client_addr, state FROM pg_stat_replication;"
+      register: replication_status
+      failed_when: replication_status.rowcount == 0
+      changed_when: false
+
+    - name: Verify data is replicated
+      become_user: postgres
+      postgresql_query:
+        db: volleyball
+        query: "SELECT COUNT(*) FROM teams;"
+      register: teams_count
+      failed_when: teams_count.query_result[0].count == 0
+      changed_when: false

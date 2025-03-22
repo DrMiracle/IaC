@@ -1,0 +1,93 @@
+---
+- name: Ensure PostgreSQL is stopped
+  service:
+    name: postgresql
+    state: stopped
+
+- name: Remove existing PostgreSQL data directory if not empty
+  file:
+    path: /var/lib/postgresql/14/main
+    state: absent
+  when: pg_data_dir.stat.exists
+
+- name: Create streaming replication on Replica
+  command: >
+    pg_basebackup -h {{ primary_ip }} -p 5432 -U {{ user }}
+    -D /var/lib/postgresql/14/main -v -P
+  environment:
+    PGPASSWORD: "{{ replication_password }}"
+  become_user: postgres
+
+- name: Start PostgreSQL
+  service:
+    name: postgresql
+    state: started
+    enabled: yes
+
+- name: Check if PostgreSQL cluster exists
+  become: yes
+  stat:
+    path: "/etc/postgresql/14/logical"
+  register: pg_cluster_exists
+
+- name: Drop existing PostgreSQL cluster if it exists
+  become: yes
+  command: pg_dropcluster 14 logical --stop
+  when: pg_cluster_exists.stat.exists
+  ignore_errors: yes
+
+- name: Create new PostgreSQL cluster
+  become: yes
+  command: pg_createcluster 14 logical --start
+
+- name: Add listen_addresses in postgresql.conf
+  lineinfile:
+    path: /etc/postgresql/14/logical/postgresql.conf
+    regexp: '^listen_addresses'
+    line: "listen_addresses = '*'"
+    state: present
+  notify: restart postgresql
+
+- name: Create volleyball database
+  become: true
+  become_user: postgres
+  postgresql_db:
+    name: volleyball_logical
+    state: present
+
+- name: Delete teams if exist
+  become: true
+  become_user: postgres
+  postgresql_query:
+    db: volleyball_logical
+    query: |
+      DROP TABLE IF EXISTS teams;
+
+- name: Create table teams
+  become: true
+  become_user: postgres
+  postgresql_query:
+    db: volleyball_logical
+    query: |
+      CREATE TABLE IF NOT EXISTS teams (
+        id_team SERIAL PRIMARY KEY,
+        team_name TEXT,
+        league_name varchar(15) not null check(
+            league_name = 'Ліга 3' OR league_name = 'Ліга 2' OR
+            league_name = 'Ліга 1' OR league_name = 'Вища ліга'),
+        wins FLOAT
+      );
+
+- name: Create subscription
+  become: yes
+  become_user: postgres
+  postgresql_query:
+    db: volleyball_logical
+    autocommit: true
+    query: |
+      CREATE SUBSCRIPTION my_subscription
+      CONNECTION 'host={{ primary_ip }} port=5432 dbname=volleyball user={{ user }} password={{ replication_password }}'
+      PUBLICATION my_publication
+      WITH (create_slot = true);
+  environment:
+    PGPORT: "5433"

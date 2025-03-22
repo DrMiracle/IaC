@@ -1,0 +1,11 @@
+---
+- name: Run initialization tasks
+  import_tasks: init.yml
+
+- name: Configure primary database
+  import_tasks: primary.yml
+  when: inventory_hostname in groups['postgres_db']
+
+- name: Configure replica database
+  import_tasks: replica.yml
+  when: inventory_hostname in groups['replica_db']

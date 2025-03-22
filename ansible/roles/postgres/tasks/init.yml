@@ -1,0 +1,40 @@
+---
+- name: Install ACL package (fix permission issues)
+  ansible.builtin.apt:
+    name: acl
+    state: present
+    update_cache: yes
+
+- name: Install PostgreSQL
+  apt:
+    name:
+      - postgresql
+      - "python3-psycopg2"
+    state: present
+    update_cache: yes
+
+- name: Check if PostgreSQL data directory exists
+  ansible.builtin.stat:
+    path: /var/lib/postgresql/14/main
+  register: pg_data_dir
+
+- name: Drop broken PostgreSQL cluster if data directory is missing
+  command: pg_dropcluster 14 main --stop
+  become: true
+  become_user: postgres
+  when: "not pg_data_dir.stat.exists"
+
+- name: Recreate PostgreSQL cluster if missing
+  command: pg_createcluster 14 main --start
+  become: true
+  become_user: postgres
+  when: "not pg_data_dir.stat.exists"
+
+- name: Ensure PostgreSQL cluster ownership is fixed
+  command: pg_lsclusters
+  register: pg_cluster_status
+  changed_when: false
+
+- name: Debug pg_lsclusters output
+  debug:
+    var: pg_cluster_status.stdout_lines
