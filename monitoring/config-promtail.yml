@@ -1,0 +1,82 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: C:\ProgramData\promtail\positions.yaml
+
+clients:
+  - url: http://localhost:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: windows_eventlog_system
+    windows_events:
+      locale: 1033
+      eventlog_name: "System"
+      xpath_query: '*'
+      use_incoming_timestamp: true
+      bookmark_path: C:\ProgramData\promtail\bookmark-system.xml
+      poll_interval: 5s
+    relabel_configs:
+      - target_label: job
+        replacement: windows_system
+      - target_label: host
+        replacement: ${COMPUTERNAME}
+      - target_label: channel
+        replacement: System
+      - source_labels: ['__windows_eventlog_level_raw']
+        target_label: 'level_num'
+      - source_labels: ['__windows_eventlog_level']
+        target_label: 'level'
+      - source_labels: ['__windows_eventlog_provider_name']
+        target_label: 'provider'
+      - source_labels: ['__windows_eventlog_event_id']
+        target_label: 'event_id'
+
+  - job_name: windows_eventlog_application
+    windows_events:
+      locale: 1033
+      eventlog_name: "Application"
+      xpath_query: '*'
+      use_incoming_timestamp: true
+      bookmark_path: C:\ProgramData\promtail\bookmark-application.xml
+      poll_interval: 5s
+    relabel_configs:
+      - target_label: job
+        replacement: windows_application
+      - target_label: host
+        replacement: ${COMPUTERNAME}
+      - target_label: channel
+        replacement: Application    
+      - source_labels: ['__windows_eventlog_level_raw']
+        target_label: 'level_num'
+      - source_labels: ['__windows_eventlog_level']
+        target_label: 'level'
+      - source_labels: ['__windows_eventlog_provider_name']
+        target_label: 'provider'
+      - source_labels: ['__windows_eventlog_event_id']
+        target_label: 'event_id'
+
+  - job_name: windows_eventlog_security
+    windows_events:
+      locale: 1033
+      eventlog_name: "Security"
+      xpath_query: '*'
+      use_incoming_timestamp: true
+      bookmark_path: C:\ProgramData\promtail\bookmark-security.xml
+      poll_interval: 10s
+    relabel_configs:
+      - target_label: job
+        replacement: windows_security
+      - target_label: host
+        replacement: ${COMPUTERNAME}
+      - target_label: channel
+        replacement: Security      
+      - source_labels: ['__windows_eventlog_keywords_displaynames']
+        target_label: 'keywords'
+      - source_labels: ['__windows_eventlog_provider_name']
+        target_label: 'provider'
+      - source_labels: ['__windows_eventlog_event_id']
+        target_label: 'event_id'
+      - source_labels: ['__windows_eventlog_task_displayname']
+        target_label: 'task'
